@@ -1,4 +1,4 @@
-### User manual:
+# User manual:
 
 ## Server
 To start the server, navigate to the server folder and run the following command:
