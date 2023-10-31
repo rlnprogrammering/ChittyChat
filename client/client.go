@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"flag"
 	"fmt"
-	proto "grpc/GRPC" // Update this import path as needed
+	proto "grpc/GRPC"
 	"os"
 	"os/signal"
 	"sync"
@@ -35,11 +35,11 @@ func connect(user *proto.User) error {
 		Active: true,
 	})
 	timestamp += 1
-	log.Printf("[%d] %s joined the server \n", timestamp, user.Name)
-	fmt.Printf("[%d] %s joined the server \n", timestamp, user.Name)
+	log.Printf("[%s-clock:%d] %s (You) requested to connect to the server \n", user.Name, timestamp, user.Name)
+	fmt.Printf("[%s-clock:%d] %s (You) requested to connect to the server \n", user.Name, timestamp, user.Name)
 
 	if err != nil {
-		return fmt.Errorf("connection failed: %v \n", err)
+		return fmt.Errorf("connection failed: %v", err)
 	}
 
 	wait.Add(1)
@@ -49,13 +49,13 @@ func connect(user *proto.User) error {
 		for {
 			msg, err := str.Recv() // Receive message from server
 			if err != nil {
-				streamerror = fmt.Errorf("Error reading message: %v \n", err)
+				streamerror = fmt.Errorf("error reading message: %v", err)
 				break
 			}
 			timestamp = max(timestamp, msg.Timestamp) + 1
 			msg.Timestamp = timestamp
-			log.Printf("[%d] %s : %s\n", msg.Timestamp, msg.Name, msg.Content) // Log message to textfile
-			fmt.Printf("[%d] %s : %s\n", msg.Timestamp, msg.Name, msg.Content) // Print message to client
+			log.Printf("[%s-clock:%d] %s: %s\n", user.Name, timestamp, msg.Name, msg.Content) // Log message to textfile
+			fmt.Printf("[%s-clock:%d] %s: %s\n", user.Name, timestamp, msg.Name, msg.Content) // Print message to client
 		}
 	}(stream)
 
@@ -119,13 +119,13 @@ func main() {
 			timestamp += 1
 			msg := &proto.Message{
 				Id:        user.Id,
-				Name:      "(Client) " + user.Name,
+				Name:      user.Name,
 				Content:   scanner.Text(),
 				Timestamp: timestamp,
 			}
 
-			log.Printf("[%d] %s (You): %s\n", msg.Timestamp, msg.Name, msg.Content)
-			fmt.Printf("[%d] %s (You): %s\n", msg.Timestamp, msg.Name, msg.Content)
+			log.Printf("[%s-clock:%d] %s (You): %s\n", user.Name, timestamp, msg.Name, msg.Content)
+			fmt.Printf("[%s-clock:%d] %s (You): %s\n", user.Name, timestamp, msg.Name, msg.Content)
 
 			_, err := client.BroadcastMessage(context.Background(), msg) // send message
 			if err != nil {

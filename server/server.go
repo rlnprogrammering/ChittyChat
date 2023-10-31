@@ -3,12 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	proto "grpc/GRPC" // Update this import path as needed
+	proto "grpc/GRPC"
 	"log"
 	"net"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"google.golang.org/grpc"
 )
@@ -29,8 +27,8 @@ type Server struct {
 
 func (s *Server) CreateStream(pconn *proto.Connect, stream proto.Broadcast_CreateStreamServer) error {
 	s.timestamp += 1 // Update timestamp after receiving connection request
-	log.Printf("[%d] Info received: New client want to connect: %s \n", s.timestamp, pconn.User.Name)
-	fmt.Printf("[%d] Info received: New client want to connect: %s \n", s.timestamp, pconn.User.Name)
+	log.Printf("[Server-clock:%d] Info received: New client want to connect: %s \n", s.timestamp, pconn.User.Name)
+	fmt.Printf("[Server-clock:%d] Info received: New client want to connect: %s \n", s.timestamp, pconn.User.Name)
 
 	conn := &Connection{
 		stream: stream,
@@ -45,13 +43,13 @@ func (s *Server) CreateStream(pconn *proto.Connect, stream proto.Broadcast_Creat
 
 	joinMessage := &proto.Message{
 		Id:        conn.id,
-		Name:      "(Server) " + conn.name,
+		Name:      conn.name,
 		Content:   fmt.Sprintf("%s joined the server", conn.name),
 		Timestamp: s.timestamp,
 	}
 
-	log.Printf("[%d] Info send: New client connected: %s \n", joinMessage.Timestamp, conn.name)
-	fmt.Printf("[%d] Info send: New client connected: %s \n", joinMessage.Timestamp, conn.name)
+	log.Printf("[Server-clock:%d] Info send: New client connected: %s \n", joinMessage.Timestamp, conn.name)
+	fmt.Printf("[Server-clock:%d] Info send: New client connected: %s \n", joinMessage.Timestamp, conn.name)
 
 	for _, c := range s.Connections {
 		if c.active {
@@ -71,13 +69,13 @@ func (s *Server) CreateStream(pconn *proto.Connect, stream proto.Broadcast_Creat
 		s.timestamp += 1 // Update timestamp before sending disconnection message
 		disconnectionMessage := &proto.Message{
 			Id:        conn.id,
-			Name:      "(Server) " + conn.name,
+			Name:      conn.name,
 			Content:   "disconnected from server",
 			Timestamp: s.timestamp,
 		}
 
-		log.Printf("[%d] Info send: User %s disconnected \n", disconnectionMessage.Timestamp, conn.name)
-		fmt.Printf("[%d] Info send: User %s disconnected \n", disconnectionMessage.Timestamp, conn.name)
+		log.Printf("[Server-clock:%d] Info send: %s disconnected \n", disconnectionMessage.Timestamp, conn.name)
+		fmt.Printf("[Server-clock:%d] Info send: %s disconnected \n", disconnectionMessage.Timestamp, conn.name)
 
 		for _, c := range s.Connections {
 			if c.active && c.id != conn.id {
@@ -98,8 +96,8 @@ func (s *Server) CreateStream(pconn *proto.Connect, stream proto.Broadcast_Creat
 
 func (s *Server) BroadcastMessage(ctx context.Context, msg *proto.Message) (*proto.Close, error) {
 	s.timestamp = max(s.timestamp, msg.Timestamp) + 1 // Update timestamp after receiving message
-	log.Printf("[%d] Message received from %s: %s \n", s.timestamp, msg.Name, msg.Content)
-	fmt.Printf("[%d] Message received from %s: %s \n", s.timestamp, msg.Name, msg.Content)
+	log.Printf("[Server-clock:%d] Message received from %s: %s \n", s.timestamp, msg.Name, msg.Content)
+	fmt.Printf("[Server-clock:%d] Message received from %s: %s \n", s.timestamp, msg.Name, msg.Content)
 
 	// Send the message to all active clients except the sender
 	senderName := ""
@@ -125,9 +123,13 @@ func (s *Server) BroadcastMessage(ctx context.Context, msg *proto.Message) (*pro
 			}
 		}
 	}
-
-	log.Printf("[%d] Message from %s sent to %v: %s \n", s.timestamp, senderName, recipients, msg.Content) // Log the message sent
-	fmt.Printf("[%d] Message from %s sent to %v: %s \n", s.timestamp, senderName, recipients, msg.Content)
+	if len(recipients) == 0 {
+		log.Printf("[Server-clock:%d] Attempted to send message from %s, but no recipients was found: %s \n", s.timestamp, senderName, msg.Content)
+		fmt.Printf("[Server-clock:%d] Attempted to send message from %s, but no recipients was found: %s \n", s.timestamp, senderName, msg.Content)
+	} else {
+		log.Printf("[Server-clock:%d] Message from %s sent to %v: %s \n", s.timestamp, senderName, recipients, msg.Content)
+		fmt.Printf("[Server-clock:%d] Message from %s sent to %v: %s \n", s.timestamp, senderName, recipients, msg.Content)
+	}
 
 	return &proto.Close{}, nil
 }
@@ -163,23 +165,10 @@ func main() {
 		fmt.Printf("error creating the server %v \n", err)
 	}
 	server.timestamp += 1
-	fmt.Printf("[%d] Starting server at port :8080\n", server.timestamp)
-	log.Printf("[%d] Starting server at port :8080\n", server.timestamp)
+	fmt.Printf("[Server-clock:%d] Starting server at port :8080\n", server.timestamp)
+	log.Printf("[Server-clock:%d] Starting server at port :8080\n", server.timestamp)
 
 	proto.RegisterBroadcastServer(grpcServer, server)
-
-	// Handle interrupt signal to log client disconnections
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-c
-		for _, conn := range server.Connections {
-			fmt.Printf("User %s disconnected ***** \n", conn.name)
-			log.Printf("User %s disconnected ***** \n", conn.name)
-		}
-		os.Exit(1)
-	}()
 
 	grpcServer.Serve(listener)
 }
